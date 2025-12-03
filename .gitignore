@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/
+model.pth
+.DS_Store
+venv/
