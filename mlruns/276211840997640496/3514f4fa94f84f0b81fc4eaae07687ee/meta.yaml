@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/saikrishnaallam/Desktop/cifar10_project/mlruns/276211840997640496/3514f4fa94f84f0b81fc4eaae07687ee/artifacts
+end_time: 1764822719942
+entry_point_name: ''
+experiment_id: '276211840997640496'
+lifecycle_stage: active
+run_id: 3514f4fa94f84f0b81fc4eaae07687ee
+run_name: rebellious-hare-787
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764822670732
+status: 3
+tags: []
+user_id: saikrishnaallam

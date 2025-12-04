@@ -6,3 +6,5 @@ uvicorn
 python-multipart
 pillow
 numpy
+mlflow
+protobuf>=4.25.0,<5
