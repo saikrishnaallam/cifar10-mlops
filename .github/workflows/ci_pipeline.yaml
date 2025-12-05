@@ -9,30 +9,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Get the code from the repo
+    # 1. Checkout Code
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    # 2. Build the Docker Image (using the dot!)
+    # 2. Build the Docker Image
     - name: Build Docker Image
       run: docker build -t cifar_app .
 
     # 3. Run Container in Background
-    # -d: Detached mode (doesn't block the terminal)
-    # -p: Maps port 8000 so the runner can talk to the container
+    # We add '--name cifar_server' so we can find it easily in the next step
     - name: Run Docker Container
-      run: docker run -d -p 8000:8000 cifar_app
+      run: docker run -d --name cifar_server -p 8000:8000 cifar_app
 
-    # 4. Install Dependencies on the Runner
-    # We need 'requests' and 'torchvision' to run the test script
-    - name: Install Test Dependencies
-      run: pip install -r requirements.txt
-
-    # 5. Wait for Server to Start
-    # Give Uvicorn a few seconds to wake up before hitting it
+    # 4. Wait for Server to Start
     - name: Sleep for 10 seconds
       run: sleep 10
 
-    # 6. Execute the Test
+    # 5. Execute the Test INSIDE the Container
+    # Instead of installing dependencies on the runner, we reuse the container's environment.
+    # We execute 'test_api.py' using the python inside the container.
     - name: Run Test Script
-      run: python test_api.py
+      run: docker exec cifar_server python test_api.py
