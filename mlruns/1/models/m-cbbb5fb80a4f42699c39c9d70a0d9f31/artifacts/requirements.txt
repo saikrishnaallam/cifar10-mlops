@@ -1,0 +1,8 @@
+mlflow==3.6.0
+cloudpickle==2.2.1
+dill==0.4.0
+numpy==1.26.4
+pandas==2.3.2
+pathlib==1.0.1
+torch==2.9.0
+tqdm==4.67.1

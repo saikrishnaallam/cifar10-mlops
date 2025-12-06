@@ -4,25 +4,51 @@ import torch.nn.functional as F
 from fastapi import FastAPI, File, UploadFile
 from PIL import Image
 from torchvision import transforms
-from .model import SimpleCNN
+import mlflow.pytorch
+from model import SimpleCNN
 
 app = FastAPI()
 
-# 1. Load the Model Architecture
-# We instantiate the class we defined in model.py
-model = SimpleCNN()
+# --- Configuration ---
+MODEL_NAME = "CIFAR10_Model"
+STAGE = "Production"  # We only want to serve the model marked as Production
 
-# 2. Load the Trained Weights
-# map_location='cpu' ensures this works on your laptop even if you trained on a GPU
-# We use 'try/except' just in case you haven't run train.py yet
+# --- Model Loading Logic ---
+print("Initializing API...")
+
+model = None
+
 try:
-    model.load_state_dict(torch.load("model.pth", map_location='cpu'))
-    model.eval()  # Important: Switch to evaluation mode (freezes layers like Dropout)
-    print("Model loaded successfully!")
-except FileNotFoundError:
-    print("Warning: model.pth not found. Please run train.py first.")
+    # Attempt 1: Load from MLflow Registry
+    # This ensures we are always serving the version approved for Production
+    print(f"Attempting to load model '{MODEL_NAME}' (Stage: {STAGE}) from Registry...")
+    
+    # Point to the local database where we stored the registry
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    
+    # Load the model
+    model = mlflow.pytorch.load_model(f"models:/{MODEL_NAME}/{STAGE}")
+    print("✅ Successfully loaded model from MLflow Registry.")
 
-# 3. Define the Preprocessing (MUST match training data)
+except Exception as e:
+    print(f"⚠️ Could not load from Registry: {e}")
+    print("Attempting fallback to local 'model.pth'...")
+    
+    # Attempt 2: Fallback to Local File
+    # Useful for local testing when the database might not exist or be accessible
+    try:
+        model = SimpleCNN()
+        model.load_state_dict(torch.load("model.pth", map_location='cpu'))
+        print("✅ Successfully loaded model from local file.")
+    except FileNotFoundError:
+        print("❌ CRITICAL: No model found in registry or locally. API will fail on prediction.")
+
+# Switch to evaluation mode (freezes layers like Dropout)
+if model:
+    model.eval()
+
+# --- Preprocessing ---
+# MUST match the transformation used during training
 inference_transforms = transforms.Compose([
     transforms.Resize((32, 32)),
     transforms.ToTensor(),
@@ -34,29 +60,34 @@ classes = ['plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the CIFAR-10 Classifier API!"}
+    return {
+        "message": "Welcome to the CIFAR-10 Classifier API!",
+        "model_source": "Registry" if "mlflow" in str(type(model)) else "Local File"
+    }
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    # A. Read and transform the image
+    if model is None:
+        return {"error": "Model not loaded."}
+
+    # 1. Read and Transform Image
     image_data = await file.read()
     image = Image.open(io.BytesIO(image_data))
     
-    # Ensure image is RGB (converts grayscale or PNG alpha channels)
+    # Handle non-RGB images (like PNGs with transparency)
     if image.mode != "RGB":
         image = image.convert("RGB")
         
-    # Add batch dimension (1, 3, 32, 32)
-    input_tensor = inference_transforms(image).unsqueeze(0)
+    input_tensor = inference_transforms(image).unsqueeze(0) # Add batch dim (1, 3, 32, 32)
     
-    # B. Run Inference
+    # 2. Inference
     with torch.no_grad():
         outputs = model(input_tensor)
         
-        # C. Convert to Probabilities
+        # 3. Probabilities
         probs = F.softmax(outputs, dim=1)
         
-    # D. Get the winner
+    # 4. Result
     confidence, predicted_class_index = torch.max(probs, 1)
     predicted_label = classes[predicted_class_index.item()]
     
